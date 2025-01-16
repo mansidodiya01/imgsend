@@ -4,7 +4,7 @@ import time
 from PIL import Image
 
 # Configure serial connection to Arduino
-SERIAL_PORT = '/dev/cu.usbserial-130'
+SERIAL_PORT = '/dev/ttyUSB0'
 BAUD_RATE = 115200  # Increased baud rate
 CHUNK_SIZE = 16000  # Increased chunk size significantly
 
