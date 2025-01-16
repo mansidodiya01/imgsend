@@ -1,45 +1,69 @@
 ### Raspberry Pi Code: Sending the Image
-# Save this script as "send_image.py" on your Raspberry Pi
-
 import serial
 import time
+from PIL import Image
 
 # Configure serial connection to Arduino
-arduino = serial.Serial('/dev/ttyUSB0', 9600)  # Adjust port if necessary
-time.sleep(2)  # Allow time for Arduino to reset
+SERIAL_PORT = '/dev/cu.usbserial-130'
+BAUD_RATE = 115200  # Increased baud rate
+CHUNK_SIZE = 16000  # Increased chunk size significantly
 
-# Read image as binary
-with open("img1.jpg", "rb") as image_file:
-    image_data = image_file.read()
+def connect_to_arduino(port, baud_rate):
+    """Establishes a serial connection to the Arduino."""
+    try:
+        arduino = serial.Serial(port, baud_rate)
+        time.sleep(2)  # Allow time for Arduino to reset
+        print(f"Connected to Arduino on {port} at {baud_rate} baud.")
+        return arduino
+    except serial.SerialException as e:
+        print(f"Error: Unable to connect to Arduino on {port}: {e}")
+        return None
 
-# Split data into chunks
-chunk_size = 200
-chunks = [image_data[i:i + chunk_size] for i in range(0, len(image_data), chunk_size)]
+# Establish connection
+arduino = connect_to_arduino(SERIAL_PORT, BAUD_RATE)
+if not arduino:
+    exit("Exiting: Could not establish connection to Arduino.")
+
+def compress_image(input_path, output_path, quality=15):
+    """Compress the image to reduce its size."""
+    try:
+        with Image.open(input_path) as img:
+            img.save(output_path, "JPEG", quality=quality)
+        print(f"Image compressed and saved to {output_path}.")
+    except Exception as e:
+        exit(f"Error: Unable to compress the image - {e}")
+
+# Compress the image
+input_image_path = "img1.jpg"
+compressed_image_path = "compressed_img1.jpg"
+compress_image(input_image_path, compressed_image_path)
+
+def read_image(file_path):
+    """Reads the image file as binary data."""
+    try:
+        with open(file_path, "rb") as image_file:
+            return image_file.read()
+    except FileNotFoundError:
+        exit(f"Error: File not found - {file_path}")
+    except Exception as e:
+        exit(f"Error: Unable to read the image file - {e}")
+
+image_data = read_image(compressed_image_path)
+
+chunks = [image_data[i:i + CHUNK_SIZE] for i in range(0, len(image_data), CHUNK_SIZE)]
 total_packets = len(chunks)
+print(f"Total packets: {total_packets}")
 
-# Ensure total_packets is within valid range
-if total_packets > 255:
-    raise ValueError("Total packets exceed 255; reduce chunk size or image size.")
-
-# Send chunks with metadata
 successful_transmission = True
 for i, chunk in enumerate(chunks):
     try:
-        # Ensure chunk is bytes
         if not isinstance(chunk, bytes):
             chunk = bytes(chunk)
 
-        # Validate chunk
-        if not all(0 <= byte <= 255 for byte in chunk):
-            raise ValueError(f"Invalid data in chunk {i}: {chunk}")
+        bspacket = bytes([i % 256, total_packets % 256]) + chunk
 
-        # Create the packet
-        bspacket = bytes([i, total_packets]) + chunk
-        print(f"Sending packet {i + 1}/{total_packets}, Size: {len(bspacket)}")
-
-        # Send packet
+        # Send packet without delay for faster transmission
         arduino.write(bspacket)
-        time.sleep(0.1)  # Small delay to avoid congestion
     except Exception as e:
         print(f"Error in packet {i + 1}: {e}")
         successful_transmission = False
@@ -47,3 +71,8 @@ for i, chunk in enumerate(chunks):
 
 if successful_transmission:
     print("Image transmission complete.")
+else:
+    print("Image transmission failed.")
+
+arduino.close()
+print("Connection to Arduino closed.")
