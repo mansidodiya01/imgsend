@@ -9,7 +9,7 @@ arduino = serial.Serial('/dev/ttyUSB0', 9600)  # Adjust port if necessary
 time.sleep(2)  # Allow time for Arduino to reset
 
 # Read image as binary
-with open("image.jpg", "rb") as image_file:
+with open("img1.jpg", "rb") as image_file:
     image_data = image_file.read()
 
 # Split data into chunks
@@ -17,7 +17,12 @@ chunk_size = 200
 chunks = [image_data[i:i + chunk_size] for i in range(0, len(image_data), chunk_size)]
 total_packets = len(chunks)
 
+# Ensure total_packets is within valid range
+if total_packets > 255:
+    raise ValueError("Total packets exceed 255; reduce chunk size or image size.")
+
 # Send chunks with metadata
+successful_transmission = True
 for i, chunk in enumerate(chunks):
     try:
         # Ensure chunk is bytes
@@ -26,7 +31,7 @@ for i, chunk in enumerate(chunks):
 
         # Validate chunk
         if not all(0 <= byte <= 255 for byte in chunk):
-            raise ValueError(f"Chunk {i} contains invalid data.")
+            raise ValueError(f"Invalid data in chunk {i}: {chunk}")
 
         # Create the packet
         bspacket = bytes([i, total_packets]) + chunk
@@ -37,6 +42,8 @@ for i, chunk in enumerate(chunks):
         time.sleep(0.1)  # Small delay to avoid congestion
     except Exception as e:
         print(f"Error in packet {i + 1}: {e}")
+        successful_transmission = False
         break
 
-print("Image transmission complete.")
+if successful_transmission:
+    print("Image transmission complete.")
